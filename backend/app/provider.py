@@ -111,10 +111,17 @@ class OpenAIProvider(LLMProvider):
         tool_calls = []
         if msg.tool_calls:
             for tc in msg.tool_calls:
+                raw_args = tc.function.arguments
+                if isinstance(raw_args, dict):
+                    parsed_args = raw_args
+                elif isinstance(raw_args, str):
+                    parsed_args = json.loads(raw_args or "{}")
+                else:
+                    parsed_args = {}
                 tool_calls.append({
                     "id": tc.id,
                     "name": tc.function.name,
-                    "arguments": json.loads(tc.function.arguments or "{}"),
+                    "arguments": parsed_args,
                 })
 
         return LLMResponse(content=msg.content or "", tool_calls=tool_calls)
@@ -157,3 +164,4 @@ def get_provider() -> LLMProvider:
             return K2ThinkProvider()
         case _:
             return AnthropicProvider()
+

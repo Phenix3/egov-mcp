@@ -5,6 +5,7 @@ in-process (pas de round-trip HTTP interne).
 """
 from __future__ import annotations
 
+import json as _json
 import time
 from typing import Any
 
@@ -108,6 +109,15 @@ async def orchestrate(request: ChatRequest) -> ChatResponse:
         # Exécuter chaque outil
         tool_results = []
         for tc in response1.tool_calls:
+            # Normalise arguments : certains providers renvoient une string JSON
+            args = tc["arguments"]
+            if isinstance(args, str):
+                try:
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
+            tc = {**tc, "arguments": args}
+
             t0 = time.monotonic()
             try:
                 fn = _DISPATCH.get(tc["name"])
@@ -151,3 +161,4 @@ async def orchestrate(request: ChatRequest) -> ChatResponse:
         tool_calls=tool_calls_log,
         structured=_build_structured(tool_calls_log),
     )
+
