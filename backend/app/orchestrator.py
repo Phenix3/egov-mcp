@@ -6,6 +6,7 @@ in-process (pas de round-trip HTTP interne).
 from __future__ import annotations
 
 import json as _json
+import re
 import time
 from typing import Any
 
@@ -67,6 +68,11 @@ _DISPATCH: dict[str, Any] = {
     "validate_registration_number": lambda args: validate_registration_number(ValidationInput(**args)).model_dump(),
     "get_economic_indicator": lambda args: get_economic_indicator(IndicatorInput(**args)).model_dump(),
 }
+
+def _strip_think(text: str) -> str:
+    """Supprime les blocs <think>...</think> produits par les modeles de raisonnement."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
 
 _SYSTEM_PROMPT = """Tu es un assistant fiscal et social pour PME camerounaises.
 Tu réponds en {lang}. Tu utilises les outils disponibles pour calculer cotisations,
@@ -152,13 +158,14 @@ async def orchestrate(request: ChatRequest) -> ChatResponse:
         # --- Second appel LLM avec résultats ---
         messages2 = provider.build_tool_result_messages(messages, response1, tool_results)
         response2: LLMResponse = provider.complete(messages2)
-        final_reply = response2.content
+        final_reply = _strip_think(response2.content)
     else:
-        final_reply = response1.content
+        final_reply = _strip_think(response1.content)
 
     return ChatResponse(
         reply=final_reply,
         tool_calls=tool_calls_log,
         structured=_build_structured(tool_calls_log),
     )
+
 

@@ -36,10 +36,18 @@ const SUGGESTIONS = {
 
 function renderMarkdown(text: string) {
   return text.split("\n").map((line, i) => {
+    if (line.startsWith("##### "))
+      return <p key={i} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mt-2 mb-0.5">{parseBold(line.slice(6))}</p>;
+    if (line.startsWith("#### "))
+      return <h5 key={i} className="text-sm font-semibold text-zinc-800 mt-3 mb-1 border-b border-zinc-100 pb-1">{parseBold(line.slice(5))}</h5>;
     if (line.startsWith("### "))
       return <h4 key={i} className="text-sm font-semibold text-zinc-900 mt-3 mb-1">{parseBold(line.slice(4))}</h4>;
     if (line.startsWith("## "))
       return <h3 key={i} className="text-base font-bold text-zinc-900 mt-4 mb-2">{parseBold(line.slice(3))}</h3>;
+    if (line.startsWith("# "))
+      return <h2 key={i} className="text-lg font-bold text-zinc-900 mt-4 mb-2">{parseBold(line.slice(2))}</h2>;
+    if (line.trim() === "---" || line.trim() === "***")
+      return <hr key={i} className="my-3 border-zinc-200" />;
     if (line.startsWith("- ") || line.startsWith("* "))
       return <li key={i} className="ml-4 list-disc text-zinc-700 my-0.5">{parseBold(line.slice(2))}</li>;
     const numMatch = line.match(/^(\d+)\.\s(.*)/);
