@@ -1,15 +1,37 @@
 ﻿import React, { useState } from "react";
-import { PayrollTaxData } from "../../lib/types";
 import { Percent, ChevronDown, ChevronUp, Info, TrendingDown } from "lucide-react";
+
+interface BracketDetail {
+  lower: number;
+  upper: number | null;
+  rate: number;
+  amount: number;
+}
+
+interface PayrollTaxOutputData {
+  gross_salary: number;
+  taxable_base: number;
+  irpp: number;
+  other_withholdings: number;
+  net_salary: number;
+  bracket_details: BracketDetail[];
+  note?: string | null;
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("fr-CM", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
 
-export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
+const fmtRange = (b: BracketDetail): string => {
+  const lo = fmt(b.lower);
+  return b.upper == null ? `> ${lo}` : `${lo} – ${fmt(b.upper)}`;
+};
+
+export function PayrollTaxCard({ data }: { data: PayrollTaxOutputData }) {
   const [open, setOpen] = useState(true);
   const totalDeductions = data.gross_salary - data.net_salary;
   const netPct = ((data.net_salary / data.gross_salary) * 100).toFixed(1);
   const dedPct = ((totalDeductions / data.gross_salary) * 100).toFixed(1);
+  const brackets = data.bracket_details ?? [];
 
   return (
     <div className="w-full rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden my-3">
@@ -21,7 +43,7 @@ export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
           </div>
           <div>
             <p className="text-sm font-semibold text-zinc-900">IRPP & Retenues salariales</p>
-            <p className="text-[10px] text-zinc-400">Calcul déterministe · Barème CGI Cameroun</p>
+            <p className="text-[10px] text-zinc-400">Calcul deterministique · Bareme CGI Cameroun</p>
           </div>
         </div>
         <button
@@ -34,7 +56,15 @@ export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
 
       {open && (
         <div className="p-4 space-y-4">
-          {/* Gross → Net bar */}
+          {/* Note si IRPP non configure */}
+          {data.note && (
+            <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700">
+              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <p>{data.note}</p>
+            </div>
+          )}
+
+          {/* Barre brut → net */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-zinc-500">Brut : <strong className="text-zinc-800">{fmt(data.gross_salary)}</strong></span>
@@ -45,25 +75,23 @@ export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
               <div className="h-full bg-amber-400 transition-all" style={{ width: `${dedPct}%` }} />
             </div>
             <div className="flex justify-between text-[11px] text-zinc-400">
-              <span className="text-green-700">Net perçu {netPct} %</span>
+              <span className="text-green-700">Net percu {netPct}%</span>
               <span className="flex items-center gap-1 text-amber-600">
-                <TrendingDown className="w-3 h-3" /> Retenu {fmt(totalDeductions)} ({dedPct} %)
+                <TrendingDown className="w-3 h-3" /> Retenu {fmt(totalDeductions)} ({dedPct}%)
               </span>
             </div>
           </div>
 
-          {/* 2-col breakdown */}
+          {/* 2 colonnes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Retenues */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Détail des retenues</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Detail des retenues</p>
               <div className="space-y-1 text-xs">
                 {[
                   ["Base imposable IRPP", fmt(data.taxable_base), false],
                   ["IRPP", fmt(data.irpp), true],
-                  ...(data.breakdown.cac !== undefined ? [["CAC (10 % IRPP)", fmt(data.breakdown.cac), true]] : []),
-                  ...(data.breakdown.communal_tax !== undefined ? [["TDL communale", fmt(data.breakdown.communal_tax as number), false]] : []),
-                  ...(data.breakdown.pension_employee !== undefined ? [["CNPS salarié (4,2 %)", fmt(data.breakdown.pension_employee as number), false]] : []),
+                  ["Autres retenues", fmt(data.other_withholdings), false],
                 ].map(([label, value, accent]: any) => (
                   <div key={label} className="flex justify-between py-1.5 border-b border-zinc-100 last:border-0">
                     <span className="text-zinc-500">{label}</span>
@@ -77,17 +105,17 @@ export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
               </div>
             </div>
 
-            {/* Brackets */}
+            {/* Tranches IRPP */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Calcul progressif IRPP</p>
-              {data.breakdown.irpp_bracket_details?.length ? (
+              {brackets.length > 0 ? (
                 <div className="rounded-lg border border-zinc-200 divide-y divide-zinc-100 text-xs overflow-hidden">
-                  {data.breakdown.irpp_bracket_details.map((b, i) => (
+                  {brackets.map((b, i) => (
                     <div key={i} className="flex justify-between items-center px-3 py-2 bg-white">
                       <div>
-                        <span className="text-zinc-600">{b.bracket_range}</span>
+                        <span className="text-zinc-600">{fmtRange(b)}</span>
                         <span className="ml-1.5 text-[10px] bg-violet-50 text-violet-700 border border-violet-100 px-1 py-0.5 rounded">
-                          {b.rate} %
+                          {(b.rate * 100).toFixed(1)}%
                         </span>
                       </div>
                       <span className={b.amount > 0 ? "font-medium text-amber-700" : "text-zinc-300"}>
@@ -104,10 +132,10 @@ export function PayrollTaxCard({ data }: { data: PayrollTaxData }) {
             </div>
           </div>
 
-          {/* Note */}
+          {/* Note fiscale */}
           <div className="flex gap-2 p-3 bg-zinc-50 border border-zinc-100 rounded-lg text-[11px] text-zinc-500">
             <Info className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
-            <p>Abattement forfaitaire <strong className="text-zinc-700">30 %</strong> avant calcul IRPP. CAC = 10 % de l'IRPP calculé.</p>
+            <p>Abattement forfaitaire <strong className="text-zinc-700">30%</strong> avant calcul IRPP. Bareme progressif CGI Cameroun.</p>
           </div>
         </div>
       )}

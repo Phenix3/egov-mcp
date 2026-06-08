@@ -1,13 +1,42 @@
 ﻿import React, { useState } from "react";
-import { CNPSTablesData } from "../../lib/types";
 import { ShieldCheck, ChevronDown, ChevronUp, Info } from "lucide-react";
+
+interface CNPSContribution {
+  index: number;
+  gross_salary: number;
+  capped_base: number;
+  old_age_pension_employee: number;
+  old_age_pension_employer: number;
+  family_allowances_employer: number;
+  work_injury_employer: number;
+  total_employee: number;
+  total_employer: number;
+}
+
+interface CNPSOutputData {
+  contributions: CNPSContribution[];
+  grand_total_employee: number;
+  grand_total_employer: number;
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("fr-CM", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
 
-export function CNPSCard({ data }: { data: CNPSTablesData }) {
+function sumCol(rows: CNPSContribution[], key: keyof CNPSContribution): number {
+  return rows.reduce((acc, r) => acc + (r[key] as number), 0);
+}
+
+export function CNPSCard({ data }: { data: CNPSOutputData }) {
   const [open, setOpen] = useState(true);
-  const { totals } = data;
+  const rows = data.contributions ?? [];
+
+  const colTotals = {
+    gross_salary: sumCol(rows, "gross_salary"),
+    old_age_pension_employee: sumCol(rows, "old_age_pension_employee"),
+    old_age_pension_employer: sumCol(rows, "old_age_pension_employer"),
+    family_allowances_employer: sumCol(rows, "family_allowances_employer"),
+    work_injury_employer: sumCol(rows, "work_injury_employer"),
+  };
 
   return (
     <div className="w-full rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden my-3">
@@ -19,13 +48,13 @@ export function CNPSCard({ data }: { data: CNPSTablesData }) {
           </div>
           <div>
             <p className="text-sm font-semibold text-zinc-900">Cotisations CNPS</p>
-            <p className="text-[10px] text-zinc-400">Calcul déterministe · Décrets Cameroun</p>
+            <p className="text-[10px] text-zinc-400">Calcul deterministique · Decrets Cameroun</p>
           </div>
         </div>
         <button
           onClick={() => setOpen(!open)}
           className="p-1 hover:bg-zinc-100 rounded-md transition-colors cursor-pointer"
-          aria-label={open ? "Réduire" : "Développer"}
+          aria-label={open ? "Reduire" : "Developper"}
         >
           {open ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
         </button>
@@ -33,12 +62,12 @@ export function CNPSCard({ data }: { data: CNPSTablesData }) {
 
       {open && (
         <div className="p-4 space-y-4">
-          {/* Summary row */}
+          {/* Summary */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Total salarié", value: totals.old_age_pension_employee, sub: "Retraite 4,2 %" },
-              { label: "Total employeur", value: totals.total_employer, sub: "Retraite + Allocs + ATMP" },
-              { label: "CNPS global dû", value: totals.total_employee + totals.total_employer, highlight: true },
+              { label: "Total salarie", value: data.grand_total_employee, sub: "Part salariale" },
+              { label: "Total employeur", value: data.grand_total_employer, sub: "Retraite + Allocs + ATMP" },
+              { label: "CNPS global du", value: data.grand_total_employee + data.grand_total_employer, highlight: true },
             ].map(({ label, value, sub, highlight }) => (
               <div key={label} className={`rounded-lg p-3 border ${highlight ? "border-violet-200 bg-violet-50" : "border-zinc-100 bg-zinc-50"}`}>
                 <p className={`text-[10px] mb-1 ${highlight ? "text-violet-600" : "text-zinc-500"}`}>{label}</p>
@@ -53,13 +82,13 @@ export function CNPSCard({ data }: { data: CNPSTablesData }) {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-zinc-50 border-b border-zinc-200 text-[10px] uppercase tracking-wider text-zinc-500">
-                  {["Employé", "Salaire brut", "Assiette", "Retraite sal.", "Retraite pat.", "Famille", "ATMP", "Total dû"].map((h, i) => (
+                  {["Employe", "Salaire brut", "Assiette", "Retraite sal.", "Retraite pat.", "Famille", "ATMP", "Total du"].map((h, i) => (
                     <th key={h} className={`py-2.5 px-3 font-semibold ${i > 0 ? "text-right" : ""}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {data.employees.map((emp, idx) => (
+                {rows.map((emp, idx) => (
                   <tr key={idx} className="hover:bg-zinc-50 transition-colors">
                     <td className="py-2.5 px-3 font-medium text-zinc-700">#{idx + 1}</td>
                     <td className="py-2.5 px-3 text-right text-zinc-600">{fmt(emp.gross_salary)}</td>
@@ -72,14 +101,14 @@ export function CNPSCard({ data }: { data: CNPSTablesData }) {
                   </tr>
                 ))}
                 <tr className="bg-zinc-50 border-t-2 border-zinc-200 font-semibold">
-                  <td className="py-2.5 px-3 text-zinc-700">Total ({data.employees.length})</td>
-                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(totals.gross_salary)}</td>
+                  <td className="py-2.5 px-3 text-zinc-700">Total ({rows.length})</td>
+                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(colTotals.gross_salary)}</td>
                   <td className="py-2.5 px-3 text-right text-zinc-400">—</td>
-                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(totals.old_age_pension_employee)}</td>
-                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(totals.old_age_pension_employer)}</td>
-                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(totals.family_allowances_employer)}</td>
-                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(totals.work_injury_employer)}</td>
-                  <td className="py-2.5 px-3 text-right text-violet-700">{fmt(totals.total_employee + totals.total_employer)}</td>
+                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(colTotals.old_age_pension_employee)}</td>
+                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(colTotals.old_age_pension_employer)}</td>
+                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(colTotals.family_allowances_employer)}</td>
+                  <td className="py-2.5 px-3 text-right text-zinc-700">{fmt(colTotals.work_injury_employer)}</td>
+                  <td className="py-2.5 px-3 text-right text-violet-700">{fmt(data.grand_total_employee + data.grand_total_employer)}</td>
                 </tr>
               </tbody>
             </table>
@@ -89,8 +118,8 @@ export function CNPSCard({ data }: { data: CNPSTablesData }) {
           <div className="flex gap-2 p-3 bg-zinc-50 border border-zinc-100 rounded-lg text-[11px] text-zinc-500">
             <Info className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
             <p>
-              Assiette plafonnée à <strong className="text-zinc-700">{fmt(data.ceiling)}/mois</strong> (Décret 2016/072).
-              Échéance de paiement : <strong className="text-zinc-700">15 du mois suivant</strong>.
+              Taux : retraite 4,2% (sal. + pat.), allocations familiales 7% (pat.),
+              ATMP 1,75 / 2,5 / 5% selon groupe. Echeance : <strong className="text-zinc-700">15 du mois suivant</strong>.
             </p>
           </div>
         </div>
