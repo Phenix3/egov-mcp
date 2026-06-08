@@ -1,0 +1,29 @@
+﻿name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+        working-directory: ${{ github.workspace }}
+
+      - name: Run unit tests (skip integration/worldbank)
+        run: pytest backend/tests/ -x -v --ignore=backend/tests/test_worldbank.py -m "not integration"
+        working-directory: ${{ github.workspace }}
+        env:
+          LLM_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: ""
+          MCP_AUTH_TOKEN: test-token
