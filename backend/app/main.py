@@ -1,5 +1,5 @@
 ﻿"""
-Point d entrée FastAPI.
+Point d entree FastAPI.
 - /health    : keep-alive Render free tier
 - /mcp       : serveur MCP public (FastMCP, Streamable HTTP, auth Bearer)
 - /chat      : endpoint orchestrateur LLM
@@ -36,13 +36,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 @app.middleware("http")
 async def mcp_auth_middleware(request: Request, call_next):
@@ -53,6 +46,16 @@ async def mcp_auth_middleware(request: Request, call_next):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
     return await call_next(request)
 
+
+# CORSMiddleware doit etre ajoute EN DERNIER pour etre le middleware le plus
+# externe -- il enveloppe tout le reste et garantit que Access-Control-Allow-Origin
+# est present sur TOUTES les reponses, y compris les erreurs 4xx/5xx.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.mount("/mcp", mcp.streamable_http_app())
 
