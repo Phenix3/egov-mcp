@@ -65,7 +65,7 @@ Toute la logique métier vit dans le serveur MCP. Le frontend ne parle jamais di
 **Tradeoff assumé :** le free tier Render s'endort après inactivité (~50 s de cold start). Pour une démonstration c'est acceptable et documenté comme limitation connue. L'endpoint `/health` sert aussi de keep-alive pour réduire la fréquence des cold starts.
 
 URLs publiques :
-- Frontend : `[à compléter après déploiement Vercel]`
+- Frontend : https://egov-mcp-liart.vercel.app
 - Backend API : https://egov-mcp.onrender.com
 - Swagger UI : https://egov-mcp.onrender.com/docs
 - Endpoint MCP : https://egov-mcp.onrender.com/mcp

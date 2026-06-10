@@ -28,7 +28,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour les décisions d'architec
 
 | Service | URL |
 |---|---|
-| Frontend | `[à compléter après déploiement Vercel]` |
+| Frontend | https://egov-mcp-liart.vercel.app |
 | Backend API + Swagger | https://egov-mcp.onrender.com / https://egov-mcp.onrender.com/docs |
 | Endpoint MCP | https://egov-mcp.onrender.com/mcp |
 | Health check | https://egov-mcp.onrender.com/health |
