@@ -6,7 +6,7 @@
   status: 'ok' | 'error';
 }
 
-export type StructuredDataType = 'cnps_table' | 'payroll_tax_summary' | 'vat_summary' | 'validation_result' | 'indicator_chart';
+export type StructuredDataType = 'cnps_table' | 'payroll_tax_summary' | 'vat_summary' | 'validation_result' | 'indicator_chart' | 'fiscal_obligations';
 
 export interface StructuredData {
   type: StructuredDataType;
@@ -20,6 +20,7 @@ export interface Message {
   timestamp: string;
   tool_calls?: ToolCall[];
   structured?: StructuredData;
+  thinking?: string;
 }
 
 // CNPS Contributions Data Models
@@ -94,9 +95,9 @@ export interface ValidationData {
   pattern_description?: string;
 }
 
-// Economic Indicator Data Models
+// Economic Indicator Models (World Bank API)
 export interface Observation {
-  year: number | string;
+  year: number;
   value: number | null;
 }
 
@@ -106,4 +107,21 @@ export interface EconomicIndicatorData {
   country: string;
   observations: Observation[];
   source: string;
+}
+
+// Fiscal Obligations Models
+export interface FiscalObligation {
+  type: string;
+  label: string;
+  frequency: string;
+  deadline_description: string;
+  applicable_to: string;
+  legal_reference: string;
+}
+
+export interface FiscalObligationsData {
+  obligation_type: string;
+  month: number | null;
+  obligations: FiscalObligation[];
+  count: number;
 }

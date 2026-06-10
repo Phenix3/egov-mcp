@@ -5,22 +5,33 @@ import { EconomicIndicatorData } from "../../lib/types";
 import { Globe, TrendingUp, TrendingDown, Table, BarChart2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
+// Parité fixe BEAC — 1 USD = 655,957 XAF (inchangée depuis 1999)
+const BEAC_RATE = 655.957;
+
+// Vrai pour les indicateurs monétaires en USD (PIB nominal/constant) — pas les taux (ZG/ZS)
+function isMonetaryUSD(code: string): boolean {
+  return code.includes("GDP") && !code.includes(".ZG") && !code.includes(".ZS");
+}
+
 function formatValue(val: number | null, code: string): string {
   if (val === null) return "N/A";
-  if (code.includes("GDP")) return `${(val / 1e9).toFixed(2)} Mds USD`;
+  if (isMonetaryUSD(code)) {
+    const mdsXaf = (val * BEAC_RATE) / 1e9;
+    return `${Math.round(mdsXaf).toLocaleString("fr-FR")} Mds XAF`;
+  }
   if (code.includes("POP")) return `${(val / 1e6).toFixed(2)} M hab.`;
   if (code.includes("ZG") || code.includes("ZS")) return `${val.toFixed(2)} %`;
   return val.toLocaleString("fr-FR");
 }
 
 function toChartValue(val: number, code: string): number {
-  if (code.includes("GDP")) return parseFloat((val / 1e9).toFixed(2));
+  if (isMonetaryUSD(code)) return parseFloat(((val * BEAC_RATE) / 1e9).toFixed(0));
   if (code.includes("POP")) return parseFloat((val / 1e6).toFixed(2));
   return parseFloat(val.toFixed(2));
 }
 
 function unitLabel(code: string): string {
-  if (code.includes("GDP")) return "Mds USD";
+  if (isMonetaryUSD(code)) return "Mds XAF";
   if (code.includes("POP")) return "M hab.";
   if (code.includes("ZG") || code.includes("ZS")) return "%";
   return "";

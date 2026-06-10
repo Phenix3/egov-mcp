@@ -152,6 +152,23 @@ class K2ThinkProvider(OpenAIProvider):
         self._model = config.LLM_MODEL or config.K2_DEFAULT_MODEL
 
 
+class OpenAICompatProvider(OpenAIProvider):
+    """Provider générique pour tout endpoint compatible OpenAI.
+    Configurer via OPENAI_COMPAT_BASE_URL + OPENAI_COMPAT_API_KEY + LLM_MODEL.
+    Exemples : Mistral (https://api.mistral.ai/v1), OpenRouter (https://openrouter.ai/api/v1),
+               Ollama (http://localhost:11434/v1), LM Studio, etc.
+    """
+    def __init__(self) -> None:
+        from openai import OpenAI
+        if not config.OPENAI_COMPAT_BASE_URL:
+            raise ValueError("OPENAI_COMPAT_BASE_URL manquant. Définir dans .env.")
+        self._client = OpenAI(
+            api_key=config.OPENAI_COMPAT_API_KEY or "dummy",
+            base_url=config.OPENAI_COMPAT_BASE_URL,
+        )
+        self._model = config.LLM_MODEL or "mistral-small-latest"
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -162,6 +179,8 @@ def get_provider() -> LLMProvider:
             return OpenAIProvider()
         case "k2think":
             return K2ThinkProvider()
+        case "openai_compat" | "mistral" | "openrouter":
+            return OpenAICompatProvider()
         case _:
             return AnthropicProvider()
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { ToolCall } from "../lib/types";
@@ -10,6 +10,7 @@ const TOOL_LABELS: Record<string, string> = {
   calculate_vat: "Calculateur TVA",
   validate_registration_number: "Validateur matricule",
   get_economic_indicator: "Banque Mondiale API",
+  get_fiscal_obligations: "Calendrier fiscal CGI",
 };
 
 interface Props { toolCalls: ToolCall[]; }
@@ -44,19 +45,22 @@ export function ToolExecutionViewer({ toolCalls }: Props) {
                   ? <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                   : <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />}
                 <Terminal className={`w-3.5 h-3.5 shrink-0 ${ok ? "text-violet-600" : "text-red-500"}`} />
-                <span className="font-mono text-zinc-700 font-medium">{call.tool}</span>
-                <span className="text-zinc-400 ml-1">{TOOL_LABELS[call.tool] || ""}</span>
-                <div className="ml-auto flex items-center gap-2 shrink-0">
-                  <span className="flex items-center gap-1 text-zinc-400">
+                <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-1">
+                  <span className="font-mono text-zinc-700 font-medium text-[11px] truncate">{call.tool}</span>
+                  <span className="text-zinc-400 text-[10px] truncate hidden sm:block">{TOOL_LABELS[call.tool] || ""}</span>
+                </div>
+                <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <span className="hidden sm:flex items-center gap-1 text-zinc-400">
                     <Clock className="w-3 h-3" /> {call.latency_ms} ms
                   </span>
+                  <span className="sm:hidden text-[10px] text-zinc-400">{call.latency_ms}ms</span>
                   <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full font-semibold text-[10px] ${
                     ok ? "bg-green-50 text-green-700 border border-green-200"
                        : "bg-red-50 text-red-700 border border-red-200"
                   }`}>
                     {ok
-                      ? <><CheckCircle2 className="w-2.5 h-2.5" /> OK</>
-                      : <><AlertCircle className="w-2.5 h-2.5" /> Erreur</>}
+                      ? <><CheckCircle2 className="w-2.5 h-2.5" /><span className="hidden sm:inline"> OK</span></>
+                      : <><AlertCircle className="w-2.5 h-2.5" /><span className="hidden sm:inline"> Erreur</span></>}
                   </span>
                 </div>
               </button>

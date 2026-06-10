@@ -1,0 +1,15 @@
+POST https://api.k2think.ai/v1/chat/completions
+accept: application/json
+Authorization: Bearer IFM-GYdKdHg8wbJTo7gj
+Content-Type: application/json
+
+{
+  "model": "MBZUAI-IFM/K2-Think-v2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hi there"
+    }
+  ],
+  "stream": true
+}

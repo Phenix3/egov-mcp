@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # ===========================================================================
@@ -103,21 +103,23 @@ class ValidationOutput(BaseModel):
 
 
 # ===========================================================================
-# Outil 5 — get_economic_indicator
+# Outil 5 — get_economic_indicator (API Banque Mondiale)
 # ===========================================================================
 
 class IndicatorInput(BaseModel):
     indicator: str = Field(
         ...,
         min_length=1,
-        description="Code indicateur Banque Mondiale (ex. NY.GDP.MKTP.CD)",
+        description="Code indicateur Banque Mondiale (ex. 'NY.GDP.MKTP.CD' = PIB, 'FP.CPI.TOTL.ZG' = inflation)",
     )
-    most_recent: int = Field(5, ge=1, le=50, description="Nombre de valeurs récentes à retourner")
+    most_recent: int = Field(
+        10, ge=1, le=60, description="Nombre d'observations les plus récentes à retourner"
+    )
 
 
 class Observation(BaseModel):
     year: int
-    value: float | None   # null possible dans l'API Banque Mondiale
+    value: float | None
 
 
 class IndicatorOutput(BaseModel):
@@ -126,6 +128,35 @@ class IndicatorOutput(BaseModel):
     country: str
     observations: list[Observation]
     source: str
+
+
+# ===========================================================================
+# Outil 6 — get_fiscal_obligations
+# ===========================================================================
+
+class FiscalObligationInput(BaseModel):
+    obligation_type: Literal["TVA", "IRPP", "IS", "CNPS", "DSF", "all"] = Field(
+        "all", description="Type d'obligation (TVA, IRPP, IS, CNPS, DSF) ou 'all'"
+    )
+    month: int | None = Field(
+        None, ge=1, le=12, description="Mois (1-12) pour filtrer les échéances du mois"
+    )
+
+
+class FiscalObligation(BaseModel):
+    type: str
+    label: str
+    frequency: str
+    deadline_description: str
+    applicable_to: str
+    legal_reference: str
+
+
+class FiscalObligationOutput(BaseModel):
+    obligation_type: str
+    month: int | None
+    obligations: list[FiscalObligation]
+    count: int
 
 
 # ===========================================================================
@@ -140,6 +171,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1)
     lang: Literal["fr", "en"] = "fr"
+    show_thinking: bool = False
 
 
 class ToolCallLog(BaseModel):
@@ -159,3 +191,4 @@ class ChatResponse(BaseModel):
     reply: str
     tool_calls: list[ToolCallLog] = Field(default_factory=list)
     structured: StructuredResult | None = None
+    thinking: str | None = None

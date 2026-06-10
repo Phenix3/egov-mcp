@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { Message, ToolCall, StructuredData } from "../lib/types";
@@ -15,6 +15,9 @@ import {
   Zap,
   Wifi,
   WifiOff,
+  Brain,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const SUGGESTIONS = {
@@ -23,6 +26,7 @@ const SUGGESTIONS = {
     { title: "Salaire net & IRPP", text: "Calcule l'IRPP et le salaire net pour un brut de 450 000 XAF." },
     { title: "Déclaration TVA", text: "Calcule la TVA sur un montant de 2 500 000 XAF hors taxes." },
     { title: "Validation NIU", text: "Vérifie si le numéro NIU M123456789A est valide." },
+    { title: "Obligations fiscales", text: "Quelles sont mes obligations fiscales TVA et leurs échéances ce mois-ci ?" },
     { title: "PIB du Cameroun", text: "Donne-moi l'évolution du PIB du Cameroun selon la Banque Mondiale." },
   ],
   en: [
@@ -30,32 +34,94 @@ const SUGGESTIONS = {
     { title: "Net Salary & Tax", text: "Calculate payroll taxes and net salary for a gross of 350 000 XAF." },
     { title: "VAT Calculation", text: "Compute VAT and total amount for 1 200 000 XAF excl. tax." },
     { title: "NIU Validation", text: "Verify the validity of NIU number M123456789A." },
+    { title: "Fiscal Obligations", text: "What are my VAT fiscal obligations and deadlines for this month?" },
     { title: "Cameroon GDP", text: "What is the GDP evolution of Cameroon according to the World Bank?" },
   ],
 };
 
-function renderMarkdown(text: string) {
-  return text.split("\n").map((line, i) => {
-    if (line.startsWith("##### "))
-      return <p key={i} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mt-2 mb-0.5">{parseBold(line.slice(6))}</p>;
-    if (line.startsWith("#### "))
-      return <h5 key={i} className="text-sm font-semibold text-zinc-800 mt-3 mb-1 border-b border-zinc-100 pb-1">{parseBold(line.slice(5))}</h5>;
-    if (line.startsWith("### "))
-      return <h4 key={i} className="text-sm font-semibold text-zinc-900 mt-3 mb-1">{parseBold(line.slice(4))}</h4>;
-    if (line.startsWith("## "))
-      return <h3 key={i} className="text-base font-bold text-zinc-900 mt-4 mb-2">{parseBold(line.slice(3))}</h3>;
-    if (line.startsWith("# "))
-      return <h2 key={i} className="text-lg font-bold text-zinc-900 mt-4 mb-2">{parseBold(line.slice(2))}</h2>;
-    if (line.trim() === "---" || line.trim() === "***")
-      return <hr key={i} className="my-3 border-zinc-200" />;
-    if (line.startsWith("- ") || line.startsWith("* "))
-      return <li key={i} className="ml-4 list-disc text-zinc-700 my-0.5">{parseBold(line.slice(2))}</li>;
-    const numMatch = line.match(/^(\d+)\.\s(.*)/);
-    if (numMatch)
-      return <li key={i} className="ml-4 list-decimal text-zinc-700 my-0.5">{parseBold(numMatch[2])}</li>;
-    if (!line.trim()) return <br key={i} />;
-    return <p key={i} className="text-[13px] leading-relaxed text-zinc-700 my-1">{parseBold(line)}</p>;
-  });
+function parseTableCells(line: string): string[] {
+  return line.split("|").slice(1, -1).map(c => c.trim());
+}
+
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split("\n");
+  const result: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const t = line.trim();
+
+    // ── Table block ──
+    if (t.startsWith("|")) {
+      const block: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        block.push(lines[i]);
+        i++;
+      }
+      const parsed = block.map(parseTableCells);
+      const sepIdx = parsed.findIndex(cells => cells.every(c => /^[-: ]+$/.test(c)));
+      const headerRows = sepIdx > 0 ? parsed.slice(0, sepIdx) : [];
+      const bodyRows = (sepIdx >= 0 ? parsed.slice(sepIdx + 1) : parsed).filter(r => r.length > 0);
+      result.push(
+        <div key={`tbl-${result.length}`} className="overflow-x-auto my-3 rounded-lg border border-zinc-200">
+          <table className="w-full text-xs border-collapse">
+            {headerRows.length > 0 && (
+              <thead>
+                {headerRows.map((row, ri) => (
+                  <tr key={ri} className="bg-zinc-50 border-b border-zinc-200">
+                    {row.map((cell, ci) => (
+                      <th key={ci} className="px-3 py-2 text-left font-semibold text-zinc-700 whitespace-nowrap">
+                        {parseBold(cell)}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+            )}
+            <tbody className="divide-y divide-zinc-100">
+              {bodyRows.map((row, ri) => (
+                <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="px-3 py-2 text-zinc-700">{parseBold(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // ── Headings ──
+    if (t.startsWith("##### "))
+      result.push(<p key={i} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mt-2 mb-0.5">{parseBold(t.slice(6))}</p>);
+    else if (t.startsWith("#### "))
+      result.push(<h5 key={i} className="text-sm font-semibold text-zinc-800 mt-3 mb-1 border-b border-zinc-100 pb-1">{parseBold(t.slice(5))}</h5>);
+    else if (t.startsWith("### "))
+      result.push(<h4 key={i} className="text-sm font-semibold text-zinc-900 mt-3 mb-1">{parseBold(t.slice(4))}</h4>);
+    else if (t.startsWith("## "))
+      result.push(<h3 key={i} className="text-base font-bold text-zinc-900 mt-4 mb-2">{parseBold(t.slice(3))}</h3>);
+    else if (t.startsWith("# "))
+      result.push(<h2 key={i} className="text-lg font-bold text-zinc-900 mt-4 mb-2">{parseBold(t.slice(2))}</h2>);
+    else if (t === "---" || t === "***")
+      result.push(<hr key={i} className="my-3 border-zinc-200" />);
+    else if (t.startsWith("- ") || t.startsWith("* "))
+      result.push(<li key={i} className="ml-4 list-disc text-zinc-700 my-0.5">{parseBold(t.slice(2))}</li>);
+    else {
+      const numMatch = t.match(/^(\d+)\.\s(.*)/);
+      if (numMatch)
+        result.push(<li key={i} className="ml-4 list-decimal text-zinc-700 my-0.5">{parseBold(numMatch[2])}</li>);
+      else if (!t)
+        result.push(<br key={i} />);
+      else
+        result.push(<p key={i} className="text-[13px] leading-relaxed text-zinc-700 my-1">{parseBold(t)}</p>);
+    }
+    i++;
+  }
+
+  return result;
 }
 
 function parseBold(text: string): React.ReactNode[] {
@@ -70,10 +136,34 @@ function parseBold(text: string): React.ReactNode[] {
   });
 }
 
+function ThinkingBlock({ content, lang }: { content: string; lang: "fr" | "en" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/50 overflow-hidden text-xs mb-1">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-violet-700 hover:bg-violet-100/70 transition-colors cursor-pointer"
+      >
+        <Brain className="w-3.5 h-3.5 shrink-0" />
+        <span className="font-medium flex-1 text-left">
+          {lang === "fr" ? "Raisonnement du modèle" : "Model reasoning"}
+        </span>
+        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+      </button>
+      {open && (
+        <pre className="px-3 pb-3 pt-1 text-[11px] leading-relaxed text-violet-600 whitespace-pre-wrap font-mono border-t border-violet-200">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [lang, setLang] = useState<"fr" | "en">("fr");
+  const [showThinking, setShowThinking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isBackendAlive, setIsBackendAlive] = useState<boolean | null>(null);
@@ -103,7 +193,7 @@ export function ChatInterface() {
 
     try {
       const history = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
-      const result = await sendChatMessage(history as any, lang);
+      const result = await sendChatMessage(history as any, lang, showThinking);
       setMessages((prev) => [
         ...prev,
         {
@@ -113,6 +203,7 @@ export function ChatInterface() {
           timestamp: new Date().toISOString(),
           tool_calls: result.tool_calls as ToolCall[] | undefined,
           structured: result.structured as StructuredData | undefined,
+          thinking: result.thinking,
         },
       ]);
     } catch (err: any) {
@@ -157,7 +248,20 @@ export function ChatInterface() {
             </button>
           )}
           <button
+            onClick={() => setShowThinking((v) => !v)}
+            aria-label={showThinking ? (lang === "fr" ? "Masquer la pensée" : "Hide reasoning") : (lang === "fr" ? "Afficher la pensée" : "Show reasoning")}
+            title={showThinking ? (lang === "fr" ? "Masquer le raisonnement" : "Hide reasoning") : (lang === "fr" ? "Afficher le raisonnement du modèle" : "Show model reasoning")}
+            className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors border cursor-pointer ${
+              showThinking
+                ? "bg-violet-100 border-violet-300 text-violet-700 hover:bg-violet-200"
+                : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700"
+            }`}
+          >
+            <Brain className="w-3 h-3" />
+          </button>
+          <button
             onClick={() => setLang((l) => (l === "fr" ? "en" : "fr"))}
+            aria-label={lang === "fr" ? "Switch to English" : "Passer en français"}
             className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition-colors border border-zinc-200 cursor-pointer"
           >
             <Languages className="w-3 h-3" />
@@ -170,7 +274,7 @@ export function ChatInterface() {
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
         {messages.length === 0 ? (
           /* Welcome screen */
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto py-12 space-y-6">
+          <div className="h-full flex flex-col items-center justify-center text-center w-full max-w-lg mx-auto px-4 py-8 sm:py-12 space-y-6">
             <div className="w-12 h-12 rounded-xl bg-violet-600 flex items-center justify-center shadow-sm">
               <Bot className="w-6 h-6 text-white" />
             </div>
@@ -180,8 +284,8 @@ export function ChatInterface() {
               </h2>
               <p className="text-sm text-zinc-500 leading-relaxed">
                 {lang === "fr"
-                  ? "Posez une question sur les cotisations CNPS, l'IRPP, la TVA ou les indicateurs économiques du Cameroun."
-                  : "Ask about CNPS contributions, payroll tax, VAT, or Cameroon economic indicators."}
+                  ? "Posez une question sur les cotisations CNPS, l'IRPP, la TVA, la validation de matricule, les obligations fiscales ou les indicateurs économiques du Cameroun."
+                  : "Ask about CNPS contributions, payroll tax, VAT, registration validation, fiscal obligations, or Cameroon economic indicators."}
               </p>
             </div>
 
@@ -190,7 +294,7 @@ export function ChatInterface() {
                 <Zap className="w-3 h-3 text-violet-500" />
                 {lang === "fr" ? "Suggestions" : "Quick start"}
               </p>
-              <div className="grid grid-cols-1 gap-2 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
                 {suggestions.map((s) => (
                   <button
                     key={s.title}
@@ -224,7 +328,7 @@ export function ChatInterface() {
                       : <Bot className="w-3.5 h-3.5 text-zinc-600" />}
                   </div>
 
-                  <div className={`space-y-3 max-w-[80%] ${isUser ? "items-end flex flex-col" : ""}`}>
+                  <div className={`space-y-3 max-w-[90%] sm:max-w-[80%] ${isUser ? "items-end flex flex-col" : ""}`}>
                     {/* Bubble */}
                     <div className={`px-4 py-3 rounded-xl text-sm ${
                       isUser
@@ -236,9 +340,12 @@ export function ChatInterface() {
                         : <div>{renderMarkdown(msg.content)}</div>}
                     </div>
 
-                    {/* Tool trace + structured result */}
+                    {/* Thinking + tool trace + structured result */}
                     {!isUser && (
                       <>
+                        {msg.thinking && (
+                          <ThinkingBlock content={msg.thinking} lang={lang} />
+                        )}
                         {msg.tool_calls && msg.tool_calls.length > 0 && (
                           <ToolExecutionViewer toolCalls={msg.tool_calls} />
                         )}
@@ -296,8 +403,8 @@ export function ChatInterface() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={
               lang === "fr"
-                ? "Demandez un calcul fiscal ou une donnée économique…"
-                : "Ask for a tax calculation or economic data…"
+                ? "Posez votre question fiscale…"
+                : "Ask your tax question…"
             }
             className="flex-1 px-4 py-2.5 text-sm bg-white border border-zinc-300 rounded-xl placeholder-zinc-400 text-zinc-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all disabled:opacity-50"
             disabled={isLoading}
@@ -305,6 +412,7 @@ export function ChatInterface() {
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
+            aria-label={lang === "fr" ? "Envoyer le message" : "Send message"}
             className="px-3.5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-200 disabled:text-zinc-400 text-white rounded-xl transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center justify-center"
           >
             <Send className="w-4 h-4" />

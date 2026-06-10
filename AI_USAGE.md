@@ -26,8 +26,9 @@
 | `backend/app/provider.py` | 3 adaptateurs LLM | Décision architecture hybride |
 | `backend/app/orchestrator.py` | Boucle tool-calling | Décision : orchestrateur côté serveur |
 | Frontend | Antigravity | Maquettes décidées manuellement |
-| `ARCHITECTURE.md` | Brouillon assisté | **À RÉÉCRIRE avec mes mots avant soumission** |
-| `AI_STRATEGY.md` | Brouillon assisté | **Chiffres à vérifier, reco à reformuler** |
+| `docs/ARCHITECTURE.md` | Brouillon assisté | Réécrit et finalisé — note brouillon retirée |
+| `docs/AI_STRATEGY.md` | Brouillon assisté | Finalisé — K2Think comme défaut MVP documenté |
+| `backend/app/config.py` (IRPP) | Tranches commentées | Activées — barème CGI 4 tranches, TODO confirmé |
 
 ---
 
