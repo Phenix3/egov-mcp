@@ -1,403 +1,384 @@
-# Engineering Walkthrough — Liwaza eGov MCP
-## Video Script — 12–14 minutes | Language: English
+# Engineering Walkthrough — Liwaza eGov
+## Video Script — 12 minutes | Simple English
 
 ---
 
-> **Before recording checklist:**
-> - Browser open on https://egov-mcp-liart.vercel.app
-> - VS Code open on the project
-> - Terminal ready in `backend/`
-> - Swagger open on https://egov-mcp.onrender.com/docs
-> - GitHub repo open on https://github.com/Phenix3/egov-mcp
-> - Microphone tested, screen recording started
+> **Before you record:**
+> - Open the live app: https://egov-mcp-liart.vercel.app
+> - Open VS Code with the project
+> - Open Swagger: https://egov-mcp.onrender.com/docs
+> - Open GitHub: https://github.com/Phenix3/egov-mcp
+> - Start screen recording + microphone
 
 ---
 
-## [00:00 – 01:00] SECTION 1 — Product Overview
+## [00:00 – 01:00] PART 1 — What is this product?
 
-*[SCREEN: Show the live frontend at https://egov-mcp-liart.vercel.app]*
-
----
-
-"Hi, my name is Ibrahim, and in this walkthrough I'll take you through the Liwaza eGov platform
-I built for this assessment — covering architecture decisions, MCP design, backend, frontend,
-DevOps, testing, security, and my AI strategy.
-
-Let me start with a quick demo to show what this product actually does.
-
-This is Liwaza eGov — an AI-native e-government platform that allows a Cameroonian small business
-to interact with its fiscal and social obligations through natural language, in both French and English.
-
-*[TYPE in the chat: 'Calcule les cotisations CNPS pour 3 employés payés 180 000, 320 000 et 600 000 XAF, groupe de risque B']*
-
-You can see the assistant understands the request, automatically selects the right MCP tool —
-calculate_cnps_contributions — executes it with real deterministic logic, and returns a structured
-card showing each employee's breakdown: the employee share, the employer share, and the totals.
-
-*[Wait for response — show the CNPS card]*
-
-This is not a chatbot with hardcoded answers. Every number you see came from an actual tool
-execution — the CNPS rates, the capped base, all calculated from Cameroon's regulatory framework.
-
-Let me do one more — a real external API call.
-
-*[TYPE: 'What is the GDP evolution of Cameroon?']*
-
-This one hits the World Bank API in real time, returns actual macro data, and displays it as
-an interactive chart. All XAF — converted from USD via the BEAC fixed parity rate."
+*[SCREEN: Show the live app]*
 
 ---
 
-## [01:00 – 02:30] SECTION 2 — Architecture Decisions
+"Hello. My name is Ibrahim.
 
-*[SCREEN: Switch to VS Code, open docs/ARCHITECTURE.md — or show the ASCII diagram]*
+In this video, I will show you what I built, how it works, and why I made each decision.
+
+This is Liwaza eGov.
+
+It is an AI platform for small businesses in Cameroon.
+Users can ask questions in French or English about taxes and social contributions.
+The system understands the question, runs the right tool, and returns the answer.
+
+Let me show you a quick example.
+
+*[TYPE: 'Calcule la TVA sur 500 000 XAF']*
+
+The assistant calls the VAT tool, calculates the correct amount, and shows a structured card.
+The result is real. There is no fake data here.
+
+*[Wait for response, show the card]*
+
+This is what the platform does."
 
 ---
 
-"Let me explain the key architecture decisions.
+## [01:00 – 02:15] PART 2 — Architecture decisions
 
-The core constraint given by the assessment is: React frontend as an MCP client,
-Python backend as the MCP server. My job was to make that constraint work well in practice.
+*[SCREEN: Open docs/ARCHITECTURE.md, show the diagram]*
 
-*[Show the architecture diagram in ARCHITECTURE.md]*
+---
+
+"Let me explain the architecture.
 
 The flow is simple:
 
-User types a message → POST /chat → LLM Orchestrator on the backend → MCP Server → Tool execution → structured response → UI
+The user sends a message.
+The backend receives it.
+The LLM reads the message and picks the right tool.
+The tool runs and returns a result.
+The LLM writes a response.
+The frontend shows it.
 
-One decision I made early: keep the LLM orchestrator on the backend, not in the browser.
-I could have run the agent loop client-side — that's technically possible with some LLM SDKs.
-But I rejected that approach for two reasons.
+*[Point to the diagram]*
 
-First, it would expose the LLM API key in the browser — that's a hard security no.
-Second, it would move business logic out of the MCP server, which defeats the purpose of the architecture.
+One important decision I made: the LLM runs on the backend, not in the browser.
 
-So: the frontend is a thin presentation layer. All intelligence lives server-side.
+Why? Two reasons.
 
-On monorepo versus multi-repo: I chose a monorepo — one GitHub repository with frontend/ and backend/
-at the root. The advantage here is that a single pull request can update the Pydantic schema on
-the backend and the TypeScript type on the frontend at the same time. These two files must stay
-in sync — if they drift, the UI breaks silently. Having them in the same repo makes that drift
-visible immediately in code review.
+First, if the LLM runs in the browser, the API key is visible to anyone.
+That is a security problem.
 
-The tradeoff is that CI runs for both services on every push, even if only one changed.
-At this scale, that's acceptable. At larger scale, I'd use path-based triggers in the CI."
+Second, the assessment says business logic must live in the MCP server.
+Running the LLM in the browser would break that rule.
 
----
+So the frontend is simple. It only shows what the backend sends.
 
-## [02:30 – 04:30] SECTION 3 — MCP Design
-
-*[SCREEN: Open backend/app/mcp_server.py in VS Code]*
-
----
-
-"The MCP server is the heart of the system. Let me walk through the design.
-
-*[Show the imports and build_mcp_server function]*
-
-I'm using FastMCP with two important flags: stateless_http=True and json_response=True.
-Stateless HTTP means each tool call is an independent HTTP request — no persistent session,
-no WebSocket. This is critical for deployment on Render's free tier, which doesn't support
-long-lived connections reliably. It also makes the server horizontally scalable by default.
-
-I built six tools:
-
-*[Scroll through the tools as you name them]*
-
-One — calculate_cnps_contributions. This calculates pension, family allowances, and work injury
-contributions for a list of employees. Fully deterministic, no I/O. I designed it to accept
-multiple employees in a single call because a real payroll request for a company covers
-all employees at once — not one API call per employee.
-
-Two — calculate_payroll_tax. Computes IRPP — Cameroon's personal income tax — using the
-official CGI tax brackets and applies the 30% professional expenses deduction.
-
-Three — calculate_vat. Cameroon's VAT is 19.25% — it's actually 17.5% base plus 10% CAC surcharge.
-I separated those constants in config.py so if the rate changes, there is exactly one place to update.
-
-Four — validate_registration_number. Validates CNPS and NIU numbers against their official formats.
-Important design note: this validates FORMAT only — regex-based. There is no public API from CNPS
-or DGI to verify that a number actually exists in a registry. I documented this explicitly to
-avoid hallucinating a non-existent government API.
-
-Five — get_economic_indicator. This is the only tool that makes a real HTTP call — to the
-World Bank API. No API key required. The response is normalized into typed Pydantic models
-before it reaches the orchestrator.
-
-Six — get_fiscal_obligations. Returns the fiscal calendar — TVA deadlines, IS quarterly payments,
-CNPS monthly obligations — all sourced from the CGI Cameroun.
-
-*[Show Pydantic schemas briefly in schemas.py]*
-
-Every tool validates its inputs through Pydantic before executing. If the LLM sends a malformed
-request — wrong type, out of range, missing field — Pydantic raises a validation error immediately.
-The tool never runs with bad data.
-
-I also wrap every tool execution in structured logging with tool name, latency in milliseconds,
-and status. Reviewers can inspect this in Render's log dashboard."
+I also chose a monorepo — one GitHub repository with both frontend and backend.
+The reason is simple: the backend types and the frontend types must always match.
+In a monorepo, I can change both in the same pull request.
+If they are in separate repositories, they can go out of sync, and the app breaks silently."
 
 ---
 
-## [04:30 – 06:00] SECTION 4 — Backend Design
+## [02:15 – 04:00] PART 3 — MCP Design
 
-*[SCREEN: Show backend/app/ folder structure, then main.py, then provider.py]*
-
----
-
-"The backend is organized around three layers.
-
-main.py is the entry point — it wires together FastAPI, the MCP server, the CORS middleware,
-and the /chat endpoint. One implementation detail worth calling out:
-
-*[Show the middleware section in main.py]*
-
-The CORS middleware is added last, which means it wraps everything. This ensures CORS headers
-appear on every response — including 4xx errors. I hit a bug early where error responses
-were missing Access-Control-Allow-Origin, causing the frontend to fail silently.
-Adding the middleware last was the fix.
-
-orchestrator.py contains the LLM loop. When a user sends a message, the orchestrator
-calls the LLM with the tools available. If the LLM decides to call a tool, the orchestrator
-executes it and sends the results back for a second LLM call to compose the final response.
-
-*[Show provider.py briefly]*
-
-provider.py is a clean abstraction layer. The LLM_PROVIDER environment variable selects
-which backend to use: Anthropic, OpenAI, K2Think, or any OpenAI-compatible endpoint
-like Mistral, OpenRouter, or a local Ollama instance.
-
-This matters for this product specifically. Fiscal data is sensitive. A future requirement
-might be to run this entirely on-premise with a self-hosted model. The provider abstraction
-means I can switch to a self-hosted Mistral or Llama by changing one environment variable —
-zero code changes.
-
-I also handle the thinking tokens from reasoning models. K2Think produces `<think>...</think>`
-blocks in its output. The orchestrator extracts these, strips them from the final reply,
-and if the user has enabled the 'show reasoning' toggle in the UI, returns them as a
-separate field in the response."
+*[SCREEN: Open backend/app/mcp_server.py]*
 
 ---
 
-## [06:00 – 07:15] SECTION 5 — Frontend Design
+"Now let me show the MCP server.
 
-*[SCREEN: Switch to the live app, then briefly to VS Code → frontend/components/]*
+*[Show the file]*
 
----
+I built six tools.
 
-"The frontend is built with Next.js 14 App Router, TypeScript, and Tailwind CSS.
+Tool one: calculate_cnps_contributions.
+This calculates social contributions for employees.
+It accepts a list of employees with their salary and risk group.
+It returns the employee share, the employer share, and the totals.
 
-*[Show the live app — welcome screen with suggestion cards]*
+I made it accept multiple employees at once.
+A real company has many employees. One tool call is better than ten.
 
-The primary interaction model is conversational. The welcome screen shows six suggestion cards
-as a quick-start guide — each one is a realistic use case for a Cameroonian SME accountant.
+Tool two: calculate_payroll_tax.
+This calculates IRPP — the income tax on salaries.
+It uses the official Cameroon CGI tax brackets.
 
-*[Click on a suggestion — show tool execution viewer and structured card]*
+Tool three: calculate_vat.
+This calculates VAT at 19.25 percent.
+That rate is 17.5 percent base plus 10 percent CAC surcharge.
+The rate is in config.py. If it changes, I update it in one place only.
 
-When the assistant responds, three layers of output are shown:
+Tool four: validate_registration_number.
+This checks if a CNPS or NIU number has the correct format.
+Important: it checks the FORMAT only, using a regex.
+There is no public API from CNPS or DGI to check if a number really exists.
+I did not invent a fake government API. I documented this limitation clearly.
 
-First — the natural language reply, rendered with full markdown support including tables.
-Second — the tool execution trace, showing exactly which MCP tool was called, with what
-arguments, and how long it took. This is critical for the reviewers to verify that tools
-are genuinely executing.
-Third — a structured card. Each tool type has a dedicated React component: CNPSCard,
-PayrollTaxCard, VATCard, EconomicIndicatorCard, ValidationCard, FiscalObligationsCard.
-These present the data in a format that is immediately useful — not just a text dump.
+Tool five: get_economic_indicator.
+This makes a real HTTP call to the World Bank API.
+No fake data. No cache. A real request every time.
 
-*[Show the Brain toggle — click it]*
+Tool six: get_fiscal_obligations.
+This returns the fiscal calendar for Cameroon.
+VAT deadlines, income tax deadlines, CNPS payment dates.
+All from the official CGI Cameroon.
 
-The reasoning toggle lets the user see the model's internal thought process when using
-a reasoning model. It's off by default to keep the interface clean.
+*[Show a Pydantic schema briefly]*
 
-*[Show the language toggle FR/EN]*
-
-The interface supports French and English — both in the UI labels and in the LLM system
-prompt. The system prompt is parameterized with the user's language preference."
-
----
-
-## [07:15 – 08:15] SECTION 6 — DevOps Decisions
-
-*[SCREEN: Show .github/workflows/ci.yml, then render.yaml, then Dockerfile]*
-
----
-
-"For deployment I chose Vercel for the frontend and Render for the backend.
-
-The reasoning: the MCP transport I'm using is Streamable HTTP — it requires a long-running
-process. Vercel's serverless functions have a maximum execution time of around 60 seconds
-and cold-start behavior that's incompatible with an always-on MCP server.
-Render gives me a persistent container with a public HTTPS URL, which is exactly what I need.
-
-*[Show Dockerfile]*
-
-The Dockerfile is minimal on purpose. Python 3.12-slim, copy requirements, pip install,
-copy source. No unnecessary build steps. The CMD uses the PORT environment variable —
-Render injects this dynamically, so hardcoding 8000 would break the deployment.
-
-*[Show ci.yml briefly]*
-
-CI runs on every push to main. It installs the Python dependencies, then runs the full
-test suite with pytest. If tests fail, the pipeline fails. This means I can't accidentally
-deploy broken code.
-
-*[Show render.yaml]*
-
-The render.yaml file declares the service configuration as code — runtime, health check path,
-and environment variable keys. Secrets like the API key and the MCP auth token are marked
-sync:false, meaning they must be set manually in the Render dashboard and never appear
-in source control."
+Every tool uses Pydantic to validate inputs.
+If the LLM sends a wrong type or a missing field, Pydantic stops it immediately.
+The tool never runs with bad data."
 
 ---
 
-## [08:15 – 09:00] SECTION 7 — Testing Strategy
+## [04:00 – 05:15] PART 4 — Backend design
 
-*[SCREEN: Show backend/tests/ folder in VS Code]*
-
----
-
-"I have two categories of tests.
-
-Unit tests cover the five deterministic tools: CNPS, payroll tax, VAT, validation, and
-fiscal calendar. These tests verify the math directly — given a known input, assert the
-exact output. They run in milliseconds, require no external services, and are the safety
-net against regressions if I update a tax rate or a calculation formula.
-
-Integration tests cover the World Bank API call and the full /chat endpoint.
-The World Bank test verifies that the real HTTP call returns structured data in the
-expected format. The chat test sends an actual message through the orchestrator and
-verifies that the response has the right shape — reply, tool_calls, structured output.
-
-What I don't test: the LLM's language understanding. That's probabilistic, not deterministic.
-I test that the plumbing works — if the LLM selects a tool, it executes correctly and
-returns valid data. The quality of the LLM's tool selection is evaluated empirically."
+*[SCREEN: Show main.py, then orchestrator.py, then provider.py]*
 
 ---
 
-## [09:00 – 09:45] SECTION 8 — Security Considerations
+"The backend has three main files.
 
-*[SCREEN: Show main.py — auth middleware, CORS, config.py (env vars)]*
+main.py is the entry point. It starts FastAPI, mounts the MCP server, and defines the /chat endpoint.
+
+*[Show the CORS middleware section]*
+
+One detail: I add CORS middleware last in the stack.
+This makes it wrap everything — including error responses.
+If I add it first, error responses like 401 or 422 have no CORS header.
+The browser blocks them. I found this bug early and fixed it.
+
+orchestrator.py runs the LLM loop.
+It sends the user message to the LLM.
+If the LLM calls a tool, the orchestrator runs it and sends the result back.
+Then the LLM writes the final answer.
+
+*[Show provider.py]*
+
+provider.py is an abstraction layer for the LLM.
+I can change the LLM provider with one environment variable.
+Anthropic, OpenAI, K2Think, Mistral, OpenRouter — all supported.
+
+Why does this matter?
+Payroll data is sensitive. Some companies want to process it on their own servers.
+With this abstraction, they can switch to a self-hosted model with zero code changes.
+Just change LLM_PROVIDER in the environment file."
 
 ---
 
-"Three security layers worth calling out.
+## [05:15 – 06:15] PART 5 — Frontend design
 
-First — the MCP endpoint is protected by Bearer token authentication. Any request to /mcp
-without the correct Authorization header gets a 401. This prevents unauthorized clients
-from calling fiscal calculation tools directly.
-
-Second — the LLM API key never touches the browser. The entire orchestration loop runs
-server-side. The frontend only knows the backend's /chat URL — it has no access to Anthropic
-or OpenAI credentials.
-
-Third — all fiscal inputs are validated by Pydantic before any logic runs. Gross salary
-must be positive, sector risk group must be A, B, or C, number of dependents must be
-non-negative. This prevents malformed inputs from reaching the calculation layer.
-
-One known limitation I'd address in production: the current CORS configuration uses
-allow_origins=star. That's acceptable for a demo but in production I would restrict origins
-to the specific Vercel domain."
+*[SCREEN: Show the live app]*
 
 ---
 
-## [09:45 – 11:15] SECTION 9 — AI and LLM Strategy
+"The frontend is built with Next.js, TypeScript, and Tailwind CSS.
+
+*[Show the welcome screen with suggestion cards]*
+
+The welcome screen shows six example questions.
+They are real use cases for a small business in Cameroon.
+The user can click one to start quickly.
+
+*[Click a suggestion, wait for the response]*
+
+Each assistant response has three parts.
+
+First, the text reply in natural language.
+
+Second, the tool execution trace.
+This shows which tool was called, the arguments, and how long it took.
+Reviewers can see that the tools are real.
+
+Third, a structured card.
+Each tool has a dedicated card component.
+CNPS card, VAT card, payroll tax card, economic indicator card.
+The data is formatted clearly, not just raw JSON.
+
+*[Show the Brain toggle]*
+
+This button shows the model's reasoning.
+When using a reasoning model like K2Think, the model thinks before answering.
+I can show or hide that reasoning in the UI.
+
+*[Show the language toggle]*
+
+This button switches between French and English.
+The system prompt changes too, so the assistant responds in the right language."
+
+---
+
+## [06:15 – 07:00] PART 6 — DevOps decisions
+
+*[SCREEN: Show Dockerfile, then .github/workflows/ci.yml]*
+
+---
+
+"I deployed the frontend on Vercel and the backend on Render.
+
+Why Render for the backend?
+The MCP transport I use is Streamable HTTP.
+It needs a server that runs all the time.
+Vercel serverless functions have a time limit and no persistent process.
+Render gives me a container that stays alive.
+
+*[Show the Dockerfile]*
+
+The Dockerfile is simple: Python 3.12, install requirements, copy code, start server.
+One important line: the CMD uses PORT as an environment variable.
+Render injects PORT dynamically. If I hardcode 8000, the app does not start.
+
+*[Show ci.yml]*
+
+The CI pipeline runs on every push.
+It installs dependencies and runs all tests.
+If any test fails, the pipeline fails.
+I cannot push broken code without noticing."
+
+---
+
+## [07:00 – 07:45] PART 7 — Testing strategy
+
+*[SCREEN: Show backend/tests/ folder]*
+
+---
+
+"I have two types of tests.
+
+Unit tests cover the five deterministic tools.
+For each tool, I give a known input and check the exact output.
+For example: VAT on 100,000 XAF must always return 19,250 XAF.
+These tests are fast and need no internet connection.
+
+Integration tests cover the World Bank API and the full /chat endpoint.
+The World Bank test checks that a real HTTP call returns data in the correct format.
+The chat test sends a real message and checks the response structure.
+
+What I do not test: the quality of the LLM's understanding.
+That is probabilistic. I cannot assert that the LLM always picks the right tool.
+I test that when a tool is called, it returns correct results."
+
+---
+
+## [07:45 – 08:30] PART 8 — Security
+
+*[SCREEN: Show main.py — the auth middleware section, then config.py]*
+
+---
+
+"Three security points.
+
+First: the MCP endpoint requires a Bearer token.
+Any request without the right token gets a 401 error.
+This blocks unauthorized access to the calculation tools.
+
+Second: the LLM API key stays on the server.
+The frontend never sees it.
+The frontend only calls /chat. It has no access to Anthropic or OpenAI.
+
+Third: Pydantic validates all inputs.
+Salary must be positive. Risk group must be A, B, or C.
+A bad input never reaches the calculation logic.
+
+One thing I would improve in production:
+CORS is currently open to all origins — allow_origins star.
+In production, I would restrict it to the Vercel domain only."
+
+---
+
+## [08:30 – 10:00] PART 9 — AI and LLM strategy
 
 *[SCREEN: Open docs/AI_STRATEGY.md]*
 
 ---
 
-"My AI strategy is driven by what this product actually needs from a language model.
+"My LLM strategy starts with one question: what does this product need from a language model?
 
-This is not a creative writing assistant. The LLM has one primary job: map a natural
-language fiscal question to the correct MCP tool, extract the parameters precisely,
-and explain the result clearly in French or English.
+This is not a creative assistant.
+The LLM has one job: read a fiscal question, pick the right tool, extract the parameters, explain the result.
 
-That reframes the model comparison. Raw benchmark scores matter less than tool-calling
-reliability, bilingual fluency, latency, and how the model handles sensitive payroll data.
+So the most important qualities are: reliable tool calling, good French and English, and low cost.
 
-*[Scroll through the model comparison section]*
+*[Scroll slowly through the strategy doc]*
 
-Claude Sonnet is my production recommendation. Its tool-calling is precise, it handles
-French naturally, and the cost-to-quality ratio is strong for an orchestration role.
-Claude Opus I'd reserve for complex multi-step reasoning — composing a full annual tax
-filing from multiple tool outputs. Higher cost, higher quality — worth it selectively,
-not as the default.
+Claude Sonnet is my recommendation for production.
+Tool calling is precise. French is natural. The cost is reasonable.
 
-GPT-4o is a credible alternative. Battle-tested function calling, low latency, multimodal.
-I'd keep it as a fallback to avoid single-provider lock-in.
+Claude Opus I would use only for complex tasks — like generating a full annual tax filing from multiple tool results. Higher quality, higher cost. Not for every request.
 
-GPT-4.1 is interesting for long-context requests — like processing a full set of accounting
-entries to generate a tax filing. Longer context window at competitive cost.
+GPT-4o is a strong alternative.
+Tool calling is reliable. Latency is low.
+I keep it as a backup to avoid depending on one provider.
 
-For Mistral and Llama — these are strategically important, not for quality, but for
-data sovereignty. Payroll data contains personal employee information. A self-hosted Mistral
-or Llama model running on-premise means that data never leaves the company's infrastructure.
-For a Cameroonian company concerned about GDPR-adjacent data residency, that's a real argument.
+Mistral and Llama are important for a different reason: self-hosting.
+Payroll data contains personal employee information.
+A company can run Mistral on its own server.
+The data never leaves the company.
+My provider abstraction supports this today with zero code changes.
 
-Gemini 2.5 offers a competitive cost profile for high-volume simple queries.
+Gemini 2.5 is competitive on cost for simple high-volume queries.
 
-The architecture supports all of these through the provider abstraction. Switch LLM_PROVIDER
-in the environment variable, done."
+The key point: I built the provider layer so the LLM is replaceable.
+The product does not depend on one model or one company."
 
 ---
 
-## [11:15 – 12:00] SECTION 10 — Future Improvements
+## [10:00 – 10:45] PART 10 — Future improvements
 
-*[SCREEN: Back to the live app for a clean finish]*
+*[SCREEN: Go back to the live app]*
 
 ---
 
-"A few honest observations about what I would improve.
+"Three things I would improve next.
 
-Scalability: the current architecture is a single container on Render's free tier.
-To scale from 100 to 100,000 users, I would introduce a Redis cache for deterministic
-tool results — VAT on a given amount never changes, there's no reason to compute it twice.
-The LLM orchestration layer would move to a queue-backed worker pool to handle concurrent
-requests without blocking. The MCP server, being stateless, scales horizontally with
-zero changes.
+First, caching.
+VAT on 100,000 XAF is always 19,250 XAF.
+I can cache deterministic results in Redis.
+This removes unnecessary computation and makes the system faster at scale.
 
-Features: the most valuable next tool would be a full payroll slip generator — taking
-gross salary, employee details, and producing a complete bulletin de paie PDF
-using all five existing calculation tools in sequence.
+Second, a payroll slip generator.
+This would take employee data, run all five tools together, and produce a complete pay slip PDF.
+It is the most useful feature for a small business.
 
-On data accuracy: several tax rates are currently marked as 'TODO confirm on official source'.
-Before production, I would run a formal verification cycle with a certified Cameroonian
-tax advisor and update the constants in config.py accordingly.
+Third, tax rate verification.
+Some rates in the code are marked 'TODO confirm on official source.'
+Before production, I would verify every rate with a certified Cameroonian tax advisor.
 
-To summarize what I built: a production-deployed, fully functional AI-native eGov platform
-with six real MCP tools, a bilingual conversational interface, structured output rendering,
-multi-LLM provider support, Docker, CI/CD, and complete architecture documentation.
-
+To finish: the live product is at egov-mcp-liart.vercel.app.
 The code is at github.com/Phenix3/egov-mcp.
-The live product is at egov-mcp-liart.vercel.app.
 
 Thank you."
 
 ---
 
-## END OF SCRIPT
+## END
 
 ---
 
-## Notes de tournage
+## Quick reference — key phrases to practice
 
-| Section | Durée cible | Action écran |
+These sentences appear many times. Practice them until they feel natural:
+
+| Phrase | Utilisation |
+|---|---|
+| *"I chose X because..."* | Avant chaque décision technique |
+| *"The reason is..."* | Pour expliquer un choix |
+| *"This is important because..."* | Pour souligner un point clé |
+| *"In production, I would..."* | Pour les améliorations futures |
+| *"There is no fake data."* | Part 1 et Part 4 |
+
+## Timing guide
+
+| Part | Start | Duration |
 |---|---|---|
-| 1 — Product Overview | 1:00 | Demo live app — TVA + GDP |
-| 2 — Architecture | 1:30 | ARCHITECTURE.md + diagramme |
-| 3 — MCP Design | 2:00 | mcp_server.py + schemas.py |
-| 4 — Backend Design | 1:30 | main.py + orchestrator.py + provider.py |
-| 5 — Frontend Design | 1:15 | App live + chat-interface.tsx |
-| 6 — DevOps | 1:00 | Dockerfile + ci.yml + render.yaml |
-| 7 — Testing | 0:45 | tests/ folder |
-| 8 — Security | 0:45 | main.py middleware + config.py |
-| 9 — AI Strategy | 1:30 | AI_STRATEGY.md |
-| 10 — Future | 0:45 | Live app pour finir proprement |
-| **Total** | **~12 min** | |
-
-## Conseils
-
-- Parle lentement et clairement — vise 120–130 mots/minute.
-- Pour chaque décision : dis **"I chose X because..."** pas juste "I used X".
-- Si tu rates une phrase, fais une pause de 2 secondes et reprends — facile à couper au montage.
-- Pas besoin de monter la vidéo — une seule prise continue est acceptable.
-- OBS Studio ou Loom fonctionnent bien pour l'enregistrement écran + voix.
+| 1 — Product | 0:00 | 1:00 |
+| 2 — Architecture | 1:00 | 1:15 |
+| 3 — MCP Design | 2:15 | 1:45 |
+| 4 — Backend | 4:00 | 1:15 |
+| 5 — Frontend | 5:15 | 1:00 |
+| 6 — DevOps | 6:15 | 0:45 |
+| 7 — Testing | 7:00 | 0:45 |
+| 8 — Security | 7:45 | 0:45 |
+| 9 — AI Strategy | 8:30 | 1:30 |
+| 10 — Future | 10:00 | 0:45 |
+| **Total** | | **~11 min** |
